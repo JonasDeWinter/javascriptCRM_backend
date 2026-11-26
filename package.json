@@ -2,12 +2,12 @@
   "name": "javascriptcrm_backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx tsc --noEmit && npx tsx --env-file .env --watch src/index.ts",
+    "dev": "npx tsc --noEmit && npx tsx --env-file .env --watch src/server.ts",
     "type-check": "npx tsc --noEmit",
-    "start": "npx tsx src/index.ts"
+    "start": "npx tsx src/server.ts"
   },
   "repository": {
     "type": "git",
@@ -25,13 +25,17 @@
   },
   "homepage": "https://github.com/JonasDeWinter/javascriptCRM_backend#readme",
   "dependencies": {
-    "express": "^5.3.0"
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@tsconfig/node22": "^22.0.7",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.11",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.15.0",
+    "pg": "^8.23.1",
     "prettier": "^3.10.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"

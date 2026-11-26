@@ -6,6 +6,10 @@ The API starts with three sample contacts and companies and stores data in
 memory. Changes are cleared when the server restarts, and the sample data is
 recreated.
 
+At startup, the server uses `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and
+`DB_NAME` from `.env` to create the database if needed and ensure the
+`companies` and `contacts` tables have their required columns.
+
 Successful requests return `{ "success": true, "result": ... }`. Errors return
 `{ "success": false, "errorCode": 404, "result": { "message": "..." } }`, with
 `errorCode` matching the HTTP status code.

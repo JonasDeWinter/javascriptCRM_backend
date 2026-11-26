@@ -68,6 +68,7 @@ export async function setupDatabase(): Promise<void> {
           last_name TEXT NOT NULL,
           email TEXT,
           phone TEXT,
+          company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
           company TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -79,9 +80,47 @@ export async function setupDatabase(): Promise<void> {
           ADD COLUMN IF NOT EXISTS last_name TEXT NOT NULL DEFAULT '',
           ADD COLUMN IF NOT EXISTS email TEXT,
           ADD COLUMN IF NOT EXISTS phone TEXT,
+          ADD COLUMN IF NOT EXISTS company_id UUID,
           ADD COLUMN IF NOT EXISTS company TEXT,
           ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_catalog.pg_constraint
+            WHERE conname = 'contacts_company_id_fkey'
+              AND conrelid = 'contacts'::regclass
+          ) THEN
+            ALTER TABLE contacts
+              ADD CONSTRAINT contacts_company_id_fkey
+              FOREIGN KEY (company_id)
+              REFERENCES companies(id)
+              ON DELETE SET NULL;
+          END IF;
+        END;
+        $$;
+
+        UPDATE contacts AS contact
+        SET company_id = (
+          SELECT company_record.id
+          FROM companies AS company_record
+          WHERE company_record.name = contact.company
+          ORDER BY company_record.id
+          LIMIT 1
+        ),
+        company = NULL
+        WHERE contact.company_id IS NULL
+          AND contact.company IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM companies AS company_record
+            WHERE company_record.name = contact.company
+          );
+
+        CREATE INDEX IF NOT EXISTS contacts_company_id_idx
+          ON contacts(company_id);
       `);
       await client.query(`
         CREATE TABLE IF NOT EXISTS crm_startup_state (
@@ -109,12 +148,17 @@ export async function setupDatabase(): Promise<void> {
               ('Northstar Design', 'Design', 'https://northstar.example.test', '555-0201'),
               ('Juniper Labs', 'Technology', 'https://juniper.example.test', '555-0202'),
               ('Harbor Consulting', 'Consulting', 'https://harbor.example.test', '555-0203');
-
-            INSERT INTO contacts (first_name, last_name, email, phone, company)
-            VALUES
+          `);
+          await client.query(`
+            INSERT INTO contacts (first_name, last_name, email, phone, company_id)
+            SELECT sample.first_name, sample.last_name, sample.email, sample.phone, company_record.id
+            FROM (VALUES
               ('Alex', 'Morgan', 'alex.morgan@example.test', '555-0101', 'Northstar Design'),
               ('Jamie', 'Chen', 'jamie.chen@example.test', '555-0102', 'Juniper Labs'),
-              ('Sam', 'Rivera', 'sam.rivera@example.test', '555-0103', 'Harbor Consulting');
+              ('Sam', 'Rivera', 'sam.rivera@example.test', '555-0103', 'Harbor Consulting')
+            ) AS sample(first_name, last_name, email, phone, company_name)
+            JOIN companies AS company_record
+              ON company_record.name = sample.company_name;
           `);
         }
 

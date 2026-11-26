@@ -8,6 +8,7 @@ export interface CompanyData {
 
 export interface Company extends CompanyData {
   id: string;
+  contactIds: string[];
   createdAt: string;
   updatedAt: string;
 }

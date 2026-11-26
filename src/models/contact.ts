@@ -3,10 +3,12 @@ export interface ContactData {
   lastName: Required<string>;
   email?: string;
   phone?: string;
-  company?: string;
+  companyId?: string | null;
 }
 
-export interface Contact extends ContactData {
+export interface Contact extends Omit<ContactData, "companyId"> {
+  companyId?: string;
+  company?: string;
   id: string;
   createdAt: string;
   updatedAt: string;

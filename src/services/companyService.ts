@@ -12,17 +12,24 @@ type CompanyRow = Omit<Company, "createdAt" | "updatedAt"> & {
   website: string | null;
   phone: string | null;
   address: string | null;
+  contactIds: string[];
 };
 
 const COMPANY_COLUMNS = `
-  id::text AS id,
-  name,
-  industry,
-  website,
-  phone,
-  address,
-  created_at AS "createdAt",
-  updated_at AS "updatedAt"
+  company_record.id::text AS id,
+  company_record.name,
+  company_record.industry,
+  company_record.website,
+  company_record.phone,
+  company_record.address,
+  ARRAY(
+    SELECT contact.id::text
+    FROM contacts AS contact
+    WHERE contact.company_id = company_record.id
+    ORDER BY contact.created_at, contact.id
+  ) AS "contactIds",
+  company_record.created_at AS "createdAt",
+  company_record.updated_at AS "updatedAt"
 `;
 
 function toCompany(row: CompanyRow): Company {
@@ -33,21 +40,26 @@ function toCompany(row: CompanyRow): Company {
     website: row.website ?? undefined,
     phone: row.phone ?? undefined,
     address: row.address ?? undefined,
+    contactIds: row.contactIds,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
 export async function getCompanies(): Promise<Company[]> {
-  const result = await pool.query<CompanyRow>(
-    `SELECT ${COMPANY_COLUMNS} FROM companies ORDER BY created_at, id`,
-  );
+  const result = await pool.query<CompanyRow>(`
+    SELECT ${COMPANY_COLUMNS}
+    FROM companies AS company_record
+    ORDER BY company_record.created_at, company_record.id
+  `);
   return result.rows.map(toCompany);
 }
 
 export async function getCompanyById(id: string): Promise<Company | undefined> {
   const result = await pool.query<CompanyRow>(
-    `SELECT ${COMPANY_COLUMNS} FROM companies WHERE id::text = $1`,
+    `SELECT ${COMPANY_COLUMNS}
+     FROM companies AS company_record
+     WHERE lower(company_record.id::text) = lower($1)`,
     [id],
   );
   return result.rows[0] ? toCompany(result.rows[0]) : undefined;
@@ -57,9 +69,13 @@ export async function createCompany(
   input: CreateCompanyInput,
 ): Promise<Company> {
   const result = await pool.query<CompanyRow>(
-    `INSERT INTO companies (name, industry, website, phone, address)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING ${COMPANY_COLUMNS}`,
+    `WITH inserted AS (
+       INSERT INTO companies (name, industry, website, phone, address)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *
+     )
+     SELECT ${COMPANY_COLUMNS}
+     FROM inserted AS company_record`,
     [
       input.name,
       input.industry ?? null,
@@ -92,10 +108,14 @@ export async function updateCompany(
   assignments.push("updated_at = NOW()");
 
   const result = await pool.query<CompanyRow>(
-    `UPDATE companies
-     SET ${assignments.join(", ")}
-     WHERE id::text = $1
-     RETURNING ${COMPANY_COLUMNS}`,
+    `WITH updated AS (
+       UPDATE companies
+       SET ${assignments.join(", ")}
+       WHERE id::text = $1
+       RETURNING *
+     )
+     SELECT ${COMPANY_COLUMNS}
+     FROM updated AS company_record`,
     [id, ...values],
   );
   return result.rows[0] ? toCompany(result.rows[0]) : undefined;

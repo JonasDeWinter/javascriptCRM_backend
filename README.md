@@ -70,13 +70,19 @@ Contact objects have this shape:
 | `lastName` | Required on create | Contact's last name |
 | `email` | Optional | Email address |
 | `phone` | Optional | Phone number |
-| `company` | Optional | Company name |
+| `companyId` | Optional | UUID of the associated company |
+| `company` | Response only | Name of the associated company, when present |
 | `createdAt` | Generated | Creation time in ISO 8601 format |
 | `updatedAt` | Generated | Last update time in ISO 8601 format |
 
 Names must be non-empty strings when creating a contact. The API does not trim
-or validate their format. Optional fields are not checked for email, phone, or
-other formats.
+or validate their format. Email and phone values are not format-checked.
+`companyId` must be a UUID belonging to an existing company. A contact can
+reference zero or one company. Multiple contacts can reference the same
+company. Set `companyId` to `null` to remove the association; deleting a
+company also clears the association on its contacts.
+The response's `company` is the associated company name (or legacy text for
+unmatched values migrated from the previous schema).
 
 #### `GET /contacts`
 
@@ -102,9 +108,10 @@ contact has that ID.
 
 #### `POST /contacts`
 
-Creates a contact. `firstName` and `lastName` are required; all other
-properties are optional. The server generates `id`, `createdAt`, and
-`updatedAt`.
+Creates a contact. `firstName` and `lastName` are required; `email`, `phone`,
+and `companyId` are optional. Supply the UUID of an existing company to
+associate it. Replace `COMPANY_UUID` below with the `id` from `GET /companies`.
+The server generates `id`, `createdAt`, and `updatedAt`.
 
 ```sh
 curl -X POST http://localhost:9001/contacts \
@@ -114,28 +121,32 @@ curl -X POST http://localhost:9001/contacts \
     "lastName": "Lee",
     "email": "taylor.lee@example.com",
     "phone": "555-0100",
-    "company": "Northstar Design"
+    "companyId": "COMPANY_UUID"
   }'
 ```
 
 Success: `201 Created`, with the created contact in `result`. Error: `400` if
-`firstName` or `lastName` is missing or empty.
+`firstName` or `lastName` is missing/empty, or `companyId` is not a UUID.
+Error: `404` if `companyId` does not identify an existing company.
 
 #### `PATCH /contacts/:id`
 
 Updates the supplied contact properties; omitted properties are unchanged.
 Use the contact's `id` in the path. The body may contain any subset of
-`firstName`, `lastName`, `email`, `phone`, and `company`.
+`firstName`, `lastName`, `email`, `phone`, and `companyId`. Set `companyId` to
+an existing company's UUID to associate the contact, or `null` to clear the
+association.
 
 ```sh
 curl -X PATCH http://localhost:9001/contacts/CONTACT_ID \
   -H "Content-Type: application/json" \
-  -d '{"phone": "555-0110"}'
+  -d '{"companyId": "COMPANY_UUID"}'
 ```
 
 Success: `200 OK`, with the updated contact in `result`. Errors: `400` for a
-missing/invalid ID, a non-object body, or an empty supplied name; `404` if no
-contact has that ID. Other update fields are not validated.
+missing/invalid ID, a non-object body, an empty supplied name, or an invalid
+`companyId`; `404` if the contact or associated company does not exist. Other
+update fields are not validated.
 
 #### `DELETE /contacts/:id`
 
@@ -160,12 +171,17 @@ Company objects have this shape:
 | `website` | Optional | Website URL |
 | `phone` | Optional | Phone number |
 | `address` | Optional | Postal address |
+| `contactIds` | Response only | UUIDs of contacts associated with the company |
 | `createdAt` | Generated | Creation time in ISO 8601 format |
 | `updatedAt` | Generated | Last update time in ISO 8601 format |
 
-Company properties are intended to be strings. The API requires a non-empty
-`name` when creating or updating a company. It does not validate optional
-properties or check website and phone formats.
+Each company can be associated with multiple contacts through their
+`companyId`. Every company response includes `contactIds`, which is empty if
+the company has no contacts. Creating or updating a contact's `companyId`
+updates this association automatically. Company properties are intended to be
+strings. The API requires a non-empty `name` when creating or updating a
+company. It does not validate optional properties or check website and phone
+formats.
 
 #### `GET /companies`
 
@@ -237,3 +253,4 @@ curl -X DELETE http://localhost:9001/companies/COMPANY_ID
 
 Success: `200 OK`, with `{ "id": "...", "deleted": true }` in `result`.
 Errors: `400` for a missing/invalid ID or `404` if no company has that ID.
+Deleting a company sets `companyId` to `null` for its contacts.

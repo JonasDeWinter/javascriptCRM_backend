@@ -25,7 +25,23 @@ function getStatusCode(error: unknown): number {
   return 500;
 }
 
+function isMissingAssociatedCompany(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23503" &&
+    "constraint" in error &&
+    error.constraint === "contacts_company_id_fkey"
+  );
+}
+
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
+  if (isMissingAssociatedCompany(error)) {
+    res.status(404).json(apiError(404, "Company not found"));
+    return;
+  }
+
   const statusCode = getStatusCode(error);
   console.error(error);
 

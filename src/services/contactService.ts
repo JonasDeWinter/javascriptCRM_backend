@@ -5,23 +5,28 @@ import type {
 } from "../models/contact";
 import { pool } from "../config/databaseSettings";
 
-type ContactRow = Omit<Contact, "createdAt" | "updatedAt"> & {
-  createdAt: Date;
-  updatedAt: Date;
+type ContactRow = {
+  id: string;
+  firstName: string;
+  lastName: string;
   email: string | null;
   phone: string | null;
+  companyId: string | null;
   company: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 const CONTACT_COLUMNS = `
-  id::text AS id,
-  first_name AS "firstName",
-  last_name AS "lastName",
-  email,
-  phone,
-  company,
-  created_at AS "createdAt",
-  updated_at AS "updatedAt"
+  contact.id::text AS id,
+  contact.first_name AS "firstName",
+  contact.last_name AS "lastName",
+  contact.email,
+  contact.phone,
+  contact.company_id::text AS "companyId",
+  COALESCE(company_record.name, contact.company) AS company,
+  contact.created_at AS "createdAt",
+  contact.updated_at AS "updatedAt"
 `;
 
 function toContact(row: ContactRow): Contact {
@@ -31,6 +36,7 @@ function toContact(row: ContactRow): Contact {
     lastName: row.lastName,
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
+    companyId: row.companyId ?? undefined,
     company: row.company ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -38,15 +44,21 @@ function toContact(row: ContactRow): Contact {
 }
 
 export async function getContacts(): Promise<Contact[]> {
-  const result = await pool.query<ContactRow>(
-    `SELECT ${CONTACT_COLUMNS} FROM contacts ORDER BY created_at, id`,
-  );
+  const result = await pool.query<ContactRow>(`
+    SELECT ${CONTACT_COLUMNS}
+    FROM contacts AS contact
+    LEFT JOIN companies AS company_record ON company_record.id = contact.company_id
+    ORDER BY contact.created_at, contact.id
+  `);
   return result.rows.map(toContact);
 }
 
 export async function getContactById(id: string): Promise<Contact | undefined> {
   const result = await pool.query<ContactRow>(
-    `SELECT ${CONTACT_COLUMNS} FROM contacts WHERE id::text = $1`,
+    `SELECT ${CONTACT_COLUMNS}
+     FROM contacts AS contact
+     LEFT JOIN companies AS company_record ON company_record.id = contact.company_id
+     WHERE contact.id::text = $1`,
     [id],
   );
   return result.rows[0] ? toContact(result.rows[0]) : undefined;
@@ -56,15 +68,20 @@ export async function createContact(
   input: CreateContactInput,
 ): Promise<Contact> {
   const result = await pool.query<ContactRow>(
-    `INSERT INTO contacts (first_name, last_name, email, phone, company)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING ${CONTACT_COLUMNS}`,
+    `WITH inserted AS (
+       INSERT INTO contacts (first_name, last_name, email, phone, company_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *
+     )
+     SELECT ${CONTACT_COLUMNS}
+     FROM inserted AS contact
+     LEFT JOIN companies AS company_record ON company_record.id = contact.company_id`,
     [
       input.firstName,
       input.lastName,
       input.email ?? null,
       input.phone ?? null,
-      input.company ?? null,
+      input.companyId ?? null,
     ],
   );
   return toContact(result.rows[0]);
@@ -79,7 +96,7 @@ export async function updateContact(
     ["lastName", "last_name"],
     ["email", "email"],
     ["phone", "phone"],
-    ["company", "company"],
+    ["companyId", "company_id"],
   ];
   const updates = fields.filter(([field]) =>
     Object.prototype.hasOwnProperty.call(input, field),
@@ -88,13 +105,21 @@ export async function updateContact(
   const assignments = updates.map(
     ([, column], index) => `${column} = $${index + 2}`,
   );
+  if (updates.some(([field]) => field === "companyId")) {
+    assignments.push("company = NULL");
+  }
   assignments.push("updated_at = NOW()");
 
   const result = await pool.query<ContactRow>(
-    `UPDATE contacts
-     SET ${assignments.join(", ")}
-     WHERE id::text = $1
-     RETURNING ${CONTACT_COLUMNS}`,
+    `WITH updated AS (
+       UPDATE contacts
+       SET ${assignments.join(", ")}
+       WHERE id::text = $1
+       RETURNING *
+     )
+     SELECT ${CONTACT_COLUMNS}
+     FROM updated AS contact
+     LEFT JOIN companies AS company_record ON company_record.id = contact.company_id`,
     [id, ...values],
   );
   return result.rows[0] ? toContact(result.rows[0]) : undefined;

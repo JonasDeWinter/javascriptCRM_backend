@@ -13,9 +13,34 @@ import {
   getContacts,
   updateContact as updateContactRecord,
 } from "../services/contactService";
+import { getCompanyById } from "../services/companyService";
 import type { TypedRequestBody } from "../utils/TypedRequestBody";
 
 type ContactDeleteResult = { id: string; deleted: true };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function validateCompanyId(
+  companyId: unknown,
+  res: Response,
+): Promise<boolean> {
+  if (companyId === undefined || companyId === null) {
+    return true;
+  }
+
+  if (typeof companyId !== "string" || !UUID_PATTERN.test(companyId)) {
+    res.status(400).json(apiError(400, "Company ID must be a UUID or null"));
+    return false;
+  }
+
+  if (!(await getCompanyById(companyId))) {
+    res.status(404).json(apiError(404, "Company not found"));
+    return false;
+  }
+
+  return true;
+}
 
 export function listContacts(
   _req: TypedRequestBody<ContactData>,
@@ -77,6 +102,10 @@ export async function createContact(
     return;
   }
 
+  if (!(await validateCompanyId(req.body.companyId, res))) {
+    return;
+  }
+
   const contact = await createContactRecord(req.body);
   res.status(201).json(apiSuccess(contact));
 }
@@ -113,6 +142,10 @@ export async function updateContact(
       (typeof req.body.lastName !== "string" || !req.body.lastName))
   ) {
     res.status(400).json(apiError(400, "Contact names cannot be empty"));
+    return;
+  }
+
+  if (!(await validateCompanyId(req.body.companyId, res))) {
     return;
   }
 

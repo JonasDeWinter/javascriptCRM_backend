@@ -13,6 +13,8 @@ The server listens on port `9001` by default. Set `PORT` to use another port.
 At startup, it reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and
 `DB_NAME` from `.env`, creates the database if needed, and ensures the
 `companies` and `contacts` tables have their required columns.
+The API allows cross-origin requests from any origin and handles browser
+preflight requests.
 
 The API reads and writes companies and contacts in these PostgreSQL tables, so
 changes persist across server restarts. During initial setup, the three sample

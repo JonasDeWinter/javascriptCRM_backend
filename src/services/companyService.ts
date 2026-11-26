@@ -1,81 +1,110 @@
-import { randomUUID } from "node:crypto";
 import type {
   Company,
   CreateCompanyInput,
   UpdateCompanyInput,
 } from "../models/company";
+import { pool } from "../config/database";
 
-const companies = new Map<string, Company>();
+type CompanyRow = Omit<Company, "createdAt" | "updatedAt"> & {
+  createdAt: Date;
+  updatedAt: Date;
+  industry: string | null;
+  website: string | null;
+  phone: string | null;
+  address: string | null;
+};
 
-export function seedCompanies(): void {
-  if (companies.size > 0) {
-    return;
-  }
+const COMPANY_COLUMNS = `
+  id::text AS id,
+  name,
+  industry,
+  website,
+  phone,
+  address,
+  created_at AS "createdAt",
+  updated_at AS "updatedAt"
+`;
 
-  const sampleCompanies: CreateCompanyInput[] = [
-    {
-      name: "Northstar Design",
-      industry: "Design",
-      website: "https://northstar.example.test",
-      phone: "555-0201",
-    },
-    {
-      name: "Juniper Labs",
-      industry: "Technology",
-      website: "https://juniper.example.test",
-      phone: "555-0202",
-    },
-    {
-      name: "Harbor Consulting",
-      industry: "Consulting",
-      website: "https://harbor.example.test",
-      phone: "555-0203",
-    },
-  ];
-
-  sampleCompanies.forEach(createCompany);
-}
-
-export function getCompanies(): Company[] {
-  return Array.from(companies.values());
-}
-
-export function getCompanyById(id: string): Company | undefined {
-  return companies.get(id);
-}
-
-export function createCompany(input: CreateCompanyInput): Company {
-  const now = new Date().toISOString();
-  const company: Company = {
-    ...input,
-    id: randomUUID(),
-    createdAt: now,
-    updatedAt: now,
+function toCompany(row: CompanyRow): Company {
+  return {
+    id: row.id,
+    name: row.name,
+    industry: row.industry ?? undefined,
+    website: row.website ?? undefined,
+    phone: row.phone ?? undefined,
+    address: row.address ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
-
-  companies.set(company.id, company);
-  return company;
 }
 
-export function updateCompany(
+export async function getCompanies(): Promise<Company[]> {
+  const result = await pool.query<CompanyRow>(
+    `SELECT ${COMPANY_COLUMNS} FROM companies ORDER BY created_at, id`,
+  );
+  return result.rows.map(toCompany);
+}
+
+export async function getCompanyById(id: string): Promise<Company | undefined> {
+  const result = await pool.query<CompanyRow>(
+    `SELECT ${COMPANY_COLUMNS} FROM companies WHERE id::text = $1`,
+    [id],
+  );
+  return result.rows[0] ? toCompany(result.rows[0]) : undefined;
+}
+
+export async function createCompany(
+  input: CreateCompanyInput,
+): Promise<Company> {
+  const result = await pool.query<CompanyRow>(
+    `INSERT INTO companies (name, industry, website, phone, address)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING ${COMPANY_COLUMNS}`,
+    [
+      input.name,
+      input.industry ?? null,
+      input.website ?? null,
+      input.phone ?? null,
+      input.address ?? null,
+    ],
+  );
+  return toCompany(result.rows[0]);
+}
+
+export async function updateCompany(
   id: string,
   input: UpdateCompanyInput,
-): Company | undefined {
-  const company = companies.get(id);
-  if (!company) {
-    return undefined;
-  }
+): Promise<Company | undefined> {
+  const fields: Array<[keyof UpdateCompanyInput, string]> = [
+    ["name", "name"],
+    ["industry", "industry"],
+    ["website", "website"],
+    ["phone", "phone"],
+    ["address", "address"],
+  ];
+  const updates = fields.filter(([field]) =>
+    Object.prototype.hasOwnProperty.call(input, field),
+  );
+  const values = updates.map(([field]) => input[field] ?? null);
+  const assignments = updates.map(
+    ([, column], index) => `${column} = $${index + 2}`,
+  );
+  assignments.push("updated_at = NOW()");
 
-  const updatedCompany: Company = {
-    ...company,
-    ...input,
-    updatedAt: new Date().toISOString(),
-  };
-
-  companies.set(id, updatedCompany);
-  return updatedCompany;
+  const result = await pool.query<CompanyRow>(
+    `UPDATE companies
+     SET ${assignments.join(", ")}
+     WHERE id::text = $1
+     RETURNING ${COMPANY_COLUMNS}`,
+    [id, ...values],
+  );
+  return result.rows[0] ? toCompany(result.rows[0]) : undefined;
 }
 
-export function deleteCompany(id: string): boolean {
-  return companies.delete(id);
+export async function deleteCompany(id: string): Promise<boolean> {
+  const result = await pool.query(
+    "DELETE FROM companies WHERE id::text = $1 RETURNING id",
+    [id],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
 }

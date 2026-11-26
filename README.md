@@ -14,10 +14,10 @@ At startup, it reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and
 `DB_NAME` from `.env`, creates the database if needed, and ensures the
 `companies` and `contacts` tables have their required columns.
 
-The current API stores companies and contacts in memory, not in those database
-tables. It starts with three sample records of each type. Changes made through
-the API are cleared when the server restarts, and the sample records are
-recreated.
+The API reads and writes companies and contacts in these PostgreSQL tables, so
+changes persist across server restarts. During initial setup, the three sample
+companies and contacts are inserted only if both tables are empty. This seed
+is recorded once, so deleting all records does not recreate them on restart.
 
 ## API
 
@@ -74,9 +74,9 @@ Contact objects have this shape:
 | `createdAt` | Generated | Creation time in ISO 8601 format |
 | `updatedAt` | Generated | Last update time in ISO 8601 format |
 
-Names must be non-empty/truthy values when creating a contact. The API does
-not trim or validate their format. Optional fields are not checked for email,
-phone, or other formats.
+Names must be non-empty strings when creating a contact. The API does not trim
+or validate their format. Optional fields are not checked for email, phone, or
+other formats.
 
 #### `GET /contacts`
 
@@ -134,8 +134,8 @@ curl -X PATCH http://localhost:9001/contacts/CONTACT_ID \
 ```
 
 Success: `200 OK`, with the updated contact in `result`. Errors: `400` for a
-missing/invalid ID or `404` if no contact has that ID. Update fields are not
-validated.
+missing/invalid ID, a non-object body, or an empty supplied name; `404` if no
+contact has that ID. Other update fields are not validated.
 
 #### `DELETE /contacts/:id`
 
@@ -163,9 +163,9 @@ Company objects have this shape:
 | `createdAt` | Generated | Creation time in ISO 8601 format |
 | `updatedAt` | Generated | Last update time in ISO 8601 format |
 
-Company properties are intended to be strings. The current API does not
-validate company fields, including the required `name`, or check website and
-phone formats.
+Company properties are intended to be strings. The API requires a non-empty
+`name` when creating or updating a company. It does not validate optional
+properties or check website and phone formats.
 
 #### `GET /companies`
 
@@ -193,8 +193,7 @@ company has that ID.
 
 Creates a company. The input contract requires `name`; `industry`, `website`,
 `phone`, and `address` are optional. The server generates `id`, `createdAt`,
-and `updatedAt`. Note that the current handler does not enforce the required
-`name`.
+and `updatedAt`. `name` must be a non-empty string.
 
 ```sh
 curl -X POST http://localhost:9001/companies \
@@ -208,13 +207,15 @@ curl -X POST http://localhost:9001/companies \
   }'
 ```
 
-Success: `201 Created`, with the created company in `result`.
+Success: `201 Created`, with the created company in `result`. Error: `400` if
+the body is not an object or `name` is missing/empty.
 
 #### `PATCH /companies/:id`
 
 Updates the supplied company properties; omitted properties are unchanged.
 Use the company's `id` in the path. The body may contain any subset of `name`,
-`industry`, `website`, `phone`, and `address`. Fields are not validated.
+`industry`, `website`, `phone`, and `address`. A supplied `name` must be a
+non-empty string; optional properties are not validated.
 
 ```sh
 curl -X PATCH http://localhost:9001/companies/COMPANY_ID \
@@ -223,7 +224,8 @@ curl -X PATCH http://localhost:9001/companies/COMPANY_ID \
 ```
 
 Success: `200 OK`, with the updated company in `result`. Errors: `400` for a
-missing/invalid ID or `404` if no company has that ID.
+missing/invalid ID, a non-object body, or an empty supplied name; `404` if no
+company has that ID.
 
 #### `DELETE /companies/:id`
 

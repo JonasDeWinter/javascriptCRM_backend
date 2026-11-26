@@ -3,7 +3,7 @@ import type {
   CreateCompanyInput,
   UpdateCompanyInput,
 } from "../models/company";
-import { pool } from "../config/database";
+import { pool } from "../config/databaseSettings";
 
 type CompanyRow = Omit<Company, "createdAt" | "updatedAt"> & {
   createdAt: Date;

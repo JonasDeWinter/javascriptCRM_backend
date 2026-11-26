@@ -3,7 +3,7 @@ import type {
   CreateContactInput,
   UpdateContactInput,
 } from "../models/contact";
-import { pool } from "../config/database";
+import { pool } from "../config/databaseSettings";
 
 type ContactRow = Omit<Contact, "createdAt" | "updatedAt"> & {
   createdAt: Date;

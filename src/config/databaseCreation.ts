@@ -1,15 +1,18 @@
 import pg from "pg";
-import { databaseAdminConfig, databaseConfig } from "./database";
+import { databaseAdminConfig, databaseConfig } from "./databaseSettings";
 
 function quoteIdentifier(identifier: string): string {
   return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 export async function setupDatabase(): Promise<void> {
+  
+  // Connect to the PostgreSQL server using the admin configuration
   const adminClient = new pg.Client({
     ...databaseAdminConfig,
   });
 
+  //  check if the database exists, and create it if it doesn't
   try {
     await adminClient.connect();
     const database = await adminClient.query(
@@ -30,6 +33,7 @@ export async function setupDatabase(): Promise<void> {
     await adminClient.end();
   }
 
+  //  connect to the newly created database and create the tables if they don't exist
   const client = new pg.Client(databaseConfig);
 
   try {
@@ -85,7 +89,8 @@ export async function setupDatabase(): Promise<void> {
           applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
-
+    
+      // Seed the database with initial sample data if the tables are empty and the seed state has not been applied yet
       const seedState = await client.query(
         "SELECT 1 FROM crm_startup_state WHERE key = $1",
         ["initial_sample_data"],

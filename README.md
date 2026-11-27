@@ -15,11 +15,24 @@ At startup, it reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and
 `companies` and `contacts` tables have their required columns.
 The API allows cross-origin requests from any origin and handles browser
 preflight requests.
+Set `JWT_SECRET` to a random secret of at least 32 bytes and
+`EMAIL_ENCRYPTION_KEY` to a base64-encoded random 32-byte key in `.env`. For
+example, generate both values with:
+
+```sh
+node -e "const c=require('node:crypto'); console.log('JWT_SECRET='+c.randomBytes(32).toString('base64')); console.log('EMAIL_ENCRYPTION_KEY='+c.randomBytes(32).toString('base64'))"
+```
+
+Keep these secrets private and persistent; changing either will invalidate
+existing login tokens or make stored user emails unreadable, respectively.
 
 The API reads and writes companies and contacts in these PostgreSQL tables, so
 changes persist across server restarts. During initial setup, the three sample
 companies and contacts are inserted only if both tables are empty. This seed
 is recorded once, so deleting all records does not recreate them on restart.
+
+User accounts are stored in the `users` table. Passwords are hashed with
+bcrypt, and email addresses are encrypted at rest with AES-256-GCM.
 
 ## API
 
@@ -33,6 +46,30 @@ All responses use JSON. Successful responses have this shape:
   "result": {}
 }
 ```
+
+### Authentication
+
+Create an account with `POST /auth/register`, providing a username, password,
+and email. Usernames are case-insensitive, 3-32 characters, and may contain
+letters, numbers, `.`, `_`, or `-`. Passwords must be 12-72 bytes.
+
+```sh
+curl -X POST http://localhost:9001/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"taylor","password":"a-long-unique-password","email":"taylor@example.com"}'
+```
+
+Log in with `POST /auth/login` to receive a one-hour bearer token:
+
+```sh
+curl -X POST http://localhost:9001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"taylor","password":"a-long-unique-password"}'
+```
+
+Send the returned token in the `Authorization: Bearer <token>` header for all
+`/contacts` and `/companies` requests. The greeting and authentication routes
+remain public.
 
 Errors have this shape, with `errorCode` matching the HTTP status:
 

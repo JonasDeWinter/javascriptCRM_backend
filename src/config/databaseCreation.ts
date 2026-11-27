@@ -41,6 +41,17 @@ export async function setupDatabase(): Promise<void> {
     await client.query("BEGIN");
     try {
       await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          username TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          email_encrypted TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx
+          ON users (LOWER(username));
+
         CREATE TABLE IF NOT EXISTS companies (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL,
@@ -180,7 +191,7 @@ export async function setupDatabase(): Promise<void> {
       }
       throw error;
     }
-    console.log("Company and contact tables are ready.");
+    console.log("User, company, and contact tables are ready.");
   } finally {
     await client.end();
   }
